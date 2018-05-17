@@ -1,6 +1,7 @@
 package com.android.a.dmyphotogridview;
 
 import android.Manifest;
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -20,22 +21,35 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.GridView;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
+import com.drew.imaging.jpeg.JpegMetadataReader;
+import com.drew.metadata.Directory;
+import com.drew.metadata.Metadata;
+import com.drew.metadata.exif.ExifImageDirectory;
+import com.tonicartos.widget.stickygridheaders.StickyGridHeadersSimpleAdapter;
 
+import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
     public static final int MY_PERMISSION_STORAGE = 123;
 
     private GridView grid_gallery;
+    private Button btn3, btn5, btn7;
 
     private ImageAdapter imageAdapter = null;
 
@@ -43,27 +57,51 @@ public class MainActivity extends AppCompatActivity {
     private String[] arrPath; // image path 배열
     private int ids[];
 
-    ArrayList<GalleryImgs> galleryImgses = new ArrayList<>();
+    private String date; // exif에서 얻어온 날짜 정보
+
+    private final int NONE = 0;
+    private final int ZOOM = 1;
+    int mode = NONE;
+
+    private float oldDist = 1f;
+    private float newDist = 1f;
+
+    ArrayList<GalleryImgs> galleryImgses = new ArrayList<GalleryImgs>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        checkPermission(); // 권한 check
-
         initView(); // 초기화
         setEvent(); // 이벤트 처리
     }
 
+    @Override
+    protected void onResume() {
+        checkPermission(); // 권한 check
+        super.onResume();
+    }
 
+    /* multi touch pinch zoom을 위한 이벤트*/
+//    public boolean onTouchEvent(MotionEvent event){
+//
+//        final int act = event.getAction();
+//        switch (act & MotionEvent.ACTION_MASK){
+//            case MotionEvent.ACTION_POINTER_DOWN:
+//                final int pointerIndex = (act & MotionEvent.ACTION_POINTER_INDEX_MASK) >> MotionEvent.ACTION_POINTER_INDEX_SHIFT;
+//
+//        }
+//
+//        return super.onTouchEvent(event);
+//    }
 
     private void getImgs() {
 
         final String[] columns = {MediaStore.Images.Media.DATA, MediaStore.Images.Media._ID};
         final String orderBy = MediaStore.Images.Media.DATE_TAKEN;
 
-        Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, null, null, orderBy + " DESC");
+        Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, null, null, orderBy + " DESC" + " limit 1000");
         int image_column_index = cursor.getColumnIndex(MediaStore.Images.Media._ID);
         this.count = cursor.getCount();
         this.arrPath = new String[this.count];
@@ -78,16 +116,16 @@ public class MainActivity extends AppCompatActivity {
 
             Log.d("img_path", arrPath[i]);
 
-//            try{
-//                ExifInterface exif = new ExifInterface(arrPath[i]);
-//                String date = exif.getAttribute(android.media.ExifInterface.TAG_DATETIME);
-//                Log.d("img_date", date);
-//            } catch (IOException e) {
-//                e.printStackTrace();
-//            }
+            date = String.valueOf(extractExifDateTime(arrPath[i]));
+            if (date != null){
+                Log.d("img_date", date);
+            }else{
+                Log.d("img_date", "null");
+            }
 
             GalleryImgs imgs = new GalleryImgs();
             imgs.setImg_url(arrPath[i]);
+            imgs.setTime(date);
             galleryImgses.add(imgs);
         }
 
@@ -98,7 +136,35 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    public class ImageAdapter extends ArrayAdapter<GalleryImgs>{
+    private Date extractExifDateTime(String imagePath) {
+        Log.d("exif", "Attempting to extract EXIF date/time from image at " + imagePath);
+        Date datetime = new Date(0); // or initialize to null, if you prefer
+        try {
+            Metadata metadata = JpegMetadataReader.readMetadata(new File(imagePath));
+            // these are listed in order of preference
+            int[] datetimeTags = new int[] { ExifImageDirectory.TAG_DATETIME_ORIGINAL,
+                    ExifImageDirectory.TAG_DATETIME,
+                    ExifImageDirectory.TAG_DATETIME_DIGITIZED };
+
+            for (Directory directory : metadata.getDirectories()) {
+                for (int tag : datetimeTags) {
+                    if (directory.containsTag(tag)) {
+                        Log.d("exif", "Using tag " + directory.getTagName(tag) + " for timestamp");
+                        SimpleDateFormat exifDatetimeFormat = new SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.getDefault());
+                        datetime = exifDatetimeFormat.parse(directory.getString(tag));
+
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w("exif", "Unable to extract EXIF metadata from image at " + imagePath, e);
+        }
+
+        return datetime;
+    }
+
+    public class ImageAdapter extends ArrayAdapter<GalleryImgs> implements StickyGridHeadersSimpleAdapter{
 
         private LayoutInflater layoutInflater = null;
         private ArrayList<GalleryImgs> galleryImgsArrayList = null;
@@ -161,22 +227,77 @@ public class MainActivity extends AppCompatActivity {
             return convertView;
         }
 
+        @Override
+        public long getHeaderId(int position) {
+            return galleryImgsArrayList.get(position).getHeaderId();
+        }
+
+        @Override
+        public View getHeaderView(int position, View convertView, ViewGroup parent) {
+
+            final HeaderViewHolder headerViewHolder;
+
+            if(convertView == null){
+                convertView = layoutInflater.inflate(R.layout.item_header, parent, false);
+                headerViewHolder = new HeaderViewHolder();
+                headerViewHolder.txtHeader = (TextView)convertView.findViewById(R.id.txtHeader);
+                convertView.setTag(headerViewHolder);
+            }else{
+                headerViewHolder = (HeaderViewHolder)convertView.getTag();
+            }
+
+            headerViewHolder.txtHeader.setText(galleryImgsArrayList.get(position).getTime());
+
+            return convertView;
+        }
+
 
         /* viewholder 생성 */
         class ImageViewHolder{
-
             int id;
             ImageView img_gallery;
+        }
 
+        class HeaderViewHolder{
+            TextView txtHeader;
         }
     }
 
     private void setEvent() {
 
+
+        /* gridview row 확인을 위한 test */
+        btn3.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                grid_gallery.setNumColumns(3);
+            }
+        });
+
+        btn5.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                grid_gallery.setNumColumns(5);
+            }
+        });
+
+        btn7.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                grid_gallery.setNumColumns(7);
+            }
+        });
+
+
+
+
     }
 
     private void initView() {
         grid_gallery = (GridView)findViewById(R.id.grid_gallery);
+        btn3 = (Button)findViewById(R.id.btn3);
+        btn5 = (Button)findViewById(R.id.btn5);
+        btn7 = (Button)findViewById(R.id.btn7);
     }
 
     private boolean checkPermission() {
@@ -203,6 +324,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 return false;
             }else{
+                getImgs();
                 return true;
             }
         }else{
