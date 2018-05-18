@@ -25,6 +25,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.GridView;
 import android.widget.ImageView;
@@ -42,16 +43,19 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Locale;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
     public static final int MY_PERMISSION_STORAGE = 123;
 
     private GridView grid_gallery;
-    private Button btn3, btn5, btn7;
 
     private ImageAdapter imageAdapter = null;
 
@@ -73,7 +77,7 @@ public class MainActivity extends AppCompatActivity {
     private float oldDist = 1f;
     private float newDist = 1f;
 
-    ArrayList<GalleryImgs> galleryImgses = new ArrayList<GalleryImgs>();
+    List<GalleryImgs> galleryImgses = new ArrayList<GalleryImgs>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -192,9 +196,43 @@ public class MainActivity extends AppCompatActivity {
 
         cursor.close();
 
-        imageAdapter = new ImageAdapter(this, R.layout.item_img, galleryImgses);
+        List<GalleryImgs> headerIdList = generateHeaderId(galleryImgses);
+        Collections.sort(headerIdList, new YMDComparator());
+
+        imageAdapter = new ImageAdapter(MainActivity.this, headerIdList, grid_gallery);
         grid_gallery.setAdapter(imageAdapter);
 
+    }
+
+    public class YMDComparator implements Comparator<GalleryImgs>{
+
+        @Override
+        public int compare(GalleryImgs o1, GalleryImgs o2) {
+            return o2.getTime().compareTo(o1.getTime());
+        }
+    }
+
+    private List<GalleryImgs> generateHeaderId(List<GalleryImgs> galleryImgses){
+
+        Map<String, Integer> mHeaderIdMap = new HashMap<String, Integer>();
+        int mHeaderId = 1;
+        List<GalleryImgs> headerIdList;
+
+        for(ListIterator<GalleryImgs> iterator = galleryImgses.listIterator(); iterator.hasNext();){
+            GalleryImgs imgs = iterator.next();
+            String ymd = imgs.getTime();
+            if(!mHeaderIdMap.containsKey(ymd)){
+                imgs.setHeaderId(mHeaderId);
+                mHeaderIdMap.put(ymd, mHeaderId);
+                mHeaderId ++;
+            }else{
+                imgs.setHeaderId(mHeaderIdMap.get(ymd));
+            }
+        }
+
+        headerIdList = galleryImgses;
+
+        return galleryImgses;
     }
 
     /* 사진 exif 정보 받아오기*/
@@ -229,25 +267,40 @@ public class MainActivity extends AppCompatActivity {
         return formatdate;
     }
 
-    public class ImageAdapter extends ArrayAdapter<GalleryImgs> implements StickyGridHeadersSimpleAdapter{
+    public class ImageAdapter extends BaseAdapter implements StickyGridHeadersSimpleAdapter{
 
         private LayoutInflater layoutInflater = null;
-        private ArrayList<GalleryImgs> galleryImgsArrayList = null;
+        private List<GalleryImgs> galleryImgsArrayList = null;
         private GridView mGridView;
 
         /* 생성자 */
-        public ImageAdapter(@NonNull Context context, int textViewResourceId, @NonNull ArrayList<GalleryImgs> imgses) {
-            super(context, textViewResourceId, imgses);
+        public ImageAdapter(@NonNull Context context, List<GalleryImgs> headerIdList, GridView mGridView) {
 
             layoutInflater = LayoutInflater.from(context);
-            this.galleryImgsArrayList = new ArrayList<>();
-            this.galleryImgsArrayList.addAll(imgses);
+            this.mGridView = mGridView;
+            this.galleryImgsArrayList = headerIdList;
+          //  this.galleryImgsArrayList = new ArrayList<>();
+
         }
+
+//        /* 생성자 */
+//        public ImageAdapter(@NonNull Context context, int textViewResourceId, @NonNull ArrayList<GalleryImgs> imgses) {
+//            super(context, textViewResourceId, imgses);
+//
+//            layoutInflater = LayoutInflater.from(context);
+//            this.galleryImgsArrayList = new ArrayList<>();
+//            this.galleryImgsArrayList.addAll(imgses);
+//        }
 
 
         @Override
         public int getCount() {
             return count;
+        }
+
+        @Override
+        public Object getItem(int position) {
+            return null;
         }
 
         @Override
@@ -333,38 +386,10 @@ public class MainActivity extends AppCompatActivity {
     private void setEvent() {
 
 
-        /* gridview row 확인을 위한 test */
-        btn3.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                grid_gallery.setNumColumns(3);
-            }
-        });
-
-        btn5.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                grid_gallery.setNumColumns(5);
-            }
-        });
-
-        btn7.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                grid_gallery.setNumColumns(7);
-            }
-        });
-
-
-
-
     }
 
     private void initView() {
         grid_gallery = (GridView)findViewById(R.id.grid_gallery);
-        btn3 = (Button)findViewById(R.id.btn3);
-        btn5 = (Button)findViewById(R.id.btn5);
-        btn7 = (Button)findViewById(R.id.btn7);
     }
 
     private boolean checkPermission() {
