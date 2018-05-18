@@ -51,9 +51,16 @@ import java.util.ListIterator;
 import java.util.Locale;
 import java.util.Map;
 
+import static android.R.attr.data;
+
 public class MainActivity extends AppCompatActivity {
 
     public static final int MY_PERMISSION_STORAGE = 123;
+
+    public static final int MODE_DAILY = 1;
+    public static final int MODE_MONTH = 2;
+    public static final int MODE_YEAR = 3;
+    int gridmode = MODE_DAILY;
 
     private GridView grid_gallery;
 
@@ -63,7 +70,9 @@ public class MainActivity extends AppCompatActivity {
     private String[] arrPath; // image path 배열
     private int ids[];
 
-    private String date; // exif에서 얻어온 날짜 정보
+    private String date; // exif에서 얻어온 날짜 정보 - 일
+    private String year; // 년
+    private String month; // 월
 
     static final int NONE = 0;
     static final int DRAG = 1;
@@ -121,12 +130,35 @@ public class MainActivity extends AppCompatActivity {
                     Log.d("zoom", "oldDist=" + oldDist);
                     if (newDist - oldDist > 700) { // zoom in
                         oldDist = newDist;
-                        grid_gallery.setNumColumns(5); // test
-                        //todo zoom in 되었을 때 구현
+
+                        switch (gridmode){
+                            case MODE_DAILY:
+                                gridmode = MODE_MONTH;
+                                grid_gallery.setNumColumns(5);
+                                break;
+                            case MODE_MONTH:
+                                gridmode = MODE_YEAR;
+                                grid_gallery.setNumColumns(7);
+                                break;
+                            case MODE_YEAR: break;
+                        }
+
                     } else if(oldDist - newDist > 700) { // zoom out
                         oldDist = newDist;
                         grid_gallery.setNumColumns(7); // test
                         //todo zoom out 되었을 때 구현
+                        switch (gridmode){
+                            case MODE_YEAR:
+                                gridmode = MODE_MONTH;
+                                grid_gallery.setNumColumns(5);
+                                break;
+                            case MODE_MONTH:
+                                gridmode = MODE_DAILY;
+                                grid_gallery.setNumColumns(3);
+                                break;
+                            case MODE_DAILY: break;
+                        }
+
                     }
                 }
                 break;
@@ -182,15 +214,32 @@ public class MainActivity extends AppCompatActivity {
             Log.d("img_path", arrPath[i]);
 
             date = extractExifDateTime(arrPath[i]);
-            if (date != null){
-                Log.d("img_date", date);
-            }else{
-                Log.d("img_date", "null");
+
+            if(date!=null){
+                try{
+                    year = date.substring(0,4);
+                    month = date.substring(0,6);
+                } catch (StringIndexOutOfBoundsException e){
+                    e.printStackTrace();
+                }
+
+                if (date.isEmpty() || year.isEmpty() || month.isEmpty() ){
+                    Log.d("img_date", "null");
+
+                }else{
+                    Log.d("img_date", date);
+                    Log.d("img_date_year", year);
+                    Log.d("img_date_month", month);
+                }
+
+
             }
 
             GalleryImgs imgs = new GalleryImgs();
             imgs.setImg_url(arrPath[i]);
             imgs.setTime(date);
+            imgs.setYear(year);
+            imgs.setMonth(month);
             galleryImgses.add(imgs);
         }
 
@@ -220,7 +269,20 @@ public class MainActivity extends AppCompatActivity {
 
         for(ListIterator<GalleryImgs> iterator = galleryImgses.listIterator(); iterator.hasNext();){
             GalleryImgs imgs = iterator.next();
-            String ymd = imgs.getTime();
+            String ymd = "";
+            switch (gridmode){
+                case MODE_DAILY:
+                    ymd = imgs.getTime();
+                    break;
+                case MODE_MONTH:
+                    ymd= imgs.getMonth();
+                    break;
+                case MODE_YEAR:
+                    ymd = imgs.getYear();
+                    break;
+            }
+
+
             if(!mHeaderIdMap.containsKey(ymd)){
                 imgs.setHeaderId(mHeaderId);
                 mHeaderIdMap.put(ymd, mHeaderId);
@@ -279,19 +341,8 @@ public class MainActivity extends AppCompatActivity {
             layoutInflater = LayoutInflater.from(context);
             this.mGridView = mGridView;
             this.galleryImgsArrayList = headerIdList;
-          //  this.galleryImgsArrayList = new ArrayList<>();
 
         }
-
-//        /* 생성자 */
-//        public ImageAdapter(@NonNull Context context, int textViewResourceId, @NonNull ArrayList<GalleryImgs> imgses) {
-//            super(context, textViewResourceId, imgses);
-//
-//            layoutInflater = LayoutInflater.from(context);
-//            this.galleryImgsArrayList = new ArrayList<>();
-//            this.galleryImgsArrayList.addAll(imgses);
-//        }
-
 
         @Override
         public int getCount() {

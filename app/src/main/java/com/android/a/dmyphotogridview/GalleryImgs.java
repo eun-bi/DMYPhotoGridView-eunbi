@@ -8,7 +8,28 @@ public class GalleryImgs {
 
     String img_url;
     String time;
+
+    String year;
+    String month;
+
     int headerId;
+
+
+    public String getYear() {
+        return year;
+    }
+
+    public void setYear(String year) {
+        this.year = year;
+    }
+
+    public String getMonth() {
+        return month;
+    }
+
+    public void setMonth(String month) {
+        this.month = month;
+    }
 
     public String getImg_url() {
         return img_url;
