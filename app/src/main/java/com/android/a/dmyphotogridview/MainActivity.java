@@ -41,7 +41,9 @@ import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
@@ -59,10 +61,15 @@ public class MainActivity extends AppCompatActivity {
 
     private String date; // exif에서 얻어온 날짜 정보
 
-    private final int NONE = 0;
-    private final int ZOOM = 1;
+    static final int NONE = 0;
+    static final int DRAG = 1;
+    static final int ZOOM = 2;
     int mode = NONE;
 
+    //드래그시 좌표 저장
+    int posX1 = 0, posX2 = 0, posY1 = 0, posY2 = 0;
+
+    // multitouch 의 경우 좌표 저장
     private float oldDist = 1f;
     private float newDist = 1f;
 
@@ -84,17 +91,71 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /* multi touch pinch zoom을 위한 이벤트*/
-//    public boolean onTouchEvent(MotionEvent event){
-//
-//        final int act = event.getAction();
-//        switch (act & MotionEvent.ACTION_MASK){
-//            case MotionEvent.ACTION_POINTER_DOWN:
-//                final int pointerIndex = (act & MotionEvent.ACTION_POINTER_INDEX_MASK) >> MotionEvent.ACTION_POINTER_INDEX_SHIFT;
-//
-//        }
-//
-//        return super.onTouchEvent(event);
-//    }
+    public void pinchInOut(MotionEvent event){
+
+        int act = event.getAction();
+
+        switch (act & MotionEvent.ACTION_MASK){
+            case MotionEvent.ACTION_DOWN : // 첫 번째 손가락 터치
+                posX1 = (int) event.getX();
+                posY1 = (int) event.getY();
+                mode = DRAG;
+                break;
+
+            case MotionEvent.ACTION_MOVE:
+                if(mode == DRAG) { // drag
+                    posX2 = (int) event.getX();
+                    posY2 = (int) event.getY();
+                    if (Math.abs(posX2 - posX1) > 20 || Math.abs(posY2 - posY1) > 20) {
+                        posX1 = posX2;
+                        posY1 = posY2;
+                    }
+                }
+                else if(mode == ZOOM){ // pinch zoom
+                    newDist = spacing(event);
+                    Log.d("zoom", "newDist=" + newDist);
+                    Log.d("zoom", "oldDist=" + oldDist);
+                    if (newDist - oldDist > 700) { // zoom in
+                        oldDist = newDist;
+                        grid_gallery.setNumColumns(5); // test
+                        //todo zoom in 되었을 때 구현
+                    } else if(oldDist - newDist > 700) { // zoom out
+                        oldDist = newDist;
+                        grid_gallery.setNumColumns(7); // test
+                        //todo zoom out 되었을 때 구현
+                    }
+                }
+                break;
+            case MotionEvent.ACTION_UP: // 첫번째 손가락 떼었을 경우
+            case MotionEvent.ACTION_POINTER_UP:
+                mode = NONE;
+                break;
+
+            case MotionEvent.ACTION_POINTER_DOWN: //두번째 손가락 터치
+
+                mode = ZOOM;
+
+                newDist = spacing(event);
+                oldDist = spacing(event);
+
+                break;
+            case MotionEvent.ACTION_CANCEL:
+            default:
+                break;
+        }
+    }
+
+    private float spacing(MotionEvent event){
+        float x = event.getX(0) - event.getX(1);
+        float y = event.getY(0) - event.getY(1);
+        return (float)Math.sqrt(x*x + y*y);
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        pinchInOut(event);
+        return super.dispatchTouchEvent(event);
+    }
 
     private void getImgs() {
 
@@ -116,7 +177,7 @@ public class MainActivity extends AppCompatActivity {
 
             Log.d("img_path", arrPath[i]);
 
-            date = String.valueOf(extractExifDateTime(arrPath[i]));
+            date = extractExifDateTime(arrPath[i]);
             if (date != null){
                 Log.d("img_date", date);
             }else{
@@ -136,9 +197,11 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    private Date extractExifDateTime(String imagePath) {
+    /* 사진 exif 정보 받아오기*/
+    private String extractExifDateTime(String imagePath) {
         Log.d("exif", "Attempting to extract EXIF date/time from image at " + imagePath);
         Date datetime = new Date(0); // or initialize to null, if you prefer
+        String formatdate = " ";
         try {
             Metadata metadata = JpegMetadataReader.readMetadata(new File(imagePath));
             // these are listed in order of preference
@@ -152,6 +215,8 @@ public class MainActivity extends AppCompatActivity {
                         Log.d("exif", "Using tag " + directory.getTagName(tag) + " for timestamp");
                         SimpleDateFormat exifDatetimeFormat = new SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.getDefault());
                         datetime = exifDatetimeFormat.parse(directory.getString(tag));
+                        SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd", Locale.getDefault());
+                        formatdate = format.format(datetime);
 
                         break;
                     }
@@ -161,13 +226,14 @@ public class MainActivity extends AppCompatActivity {
             Log.w("exif", "Unable to extract EXIF metadata from image at " + imagePath, e);
         }
 
-        return datetime;
+        return formatdate;
     }
 
     public class ImageAdapter extends ArrayAdapter<GalleryImgs> implements StickyGridHeadersSimpleAdapter{
 
         private LayoutInflater layoutInflater = null;
         private ArrayList<GalleryImgs> galleryImgsArrayList = null;
+        private GridView mGridView;
 
         /* 생성자 */
         public ImageAdapter(@NonNull Context context, int textViewResourceId, @NonNull ArrayList<GalleryImgs> imgses) {
@@ -177,6 +243,7 @@ public class MainActivity extends AppCompatActivity {
             this.galleryImgsArrayList = new ArrayList<>();
             this.galleryImgsArrayList.addAll(imgses);
         }
+
 
         @Override
         public int getCount() {
@@ -195,7 +262,7 @@ public class MainActivity extends AppCompatActivity {
             final ImageViewHolder imageViewHolder;
 
             if(convertView == null){
-                convertView = layoutInflater.inflate(R.layout.item_img, null);
+                convertView = layoutInflater.inflate(R.layout.item_img, parent, false);
                 imageViewHolder = new ImageViewHolder();
                 imageViewHolder.img_gallery = (ImageView)convertView.findViewById(R.id.img_gallery);
                 convertView.setTag(imageViewHolder);
