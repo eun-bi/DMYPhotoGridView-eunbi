@@ -132,22 +132,6 @@ public class MainActivity extends AppCompatActivity {
                         oldDist = newDist;
 
                         switch (gridmode){
-                            case MODE_DAILY:
-                                gridmode = MODE_MONTH;
-                                grid_gallery.setNumColumns(5);
-                                break;
-                            case MODE_MONTH:
-                                gridmode = MODE_YEAR;
-                                grid_gallery.setNumColumns(7);
-                                break;
-                            case MODE_YEAR: break;
-                        }
-
-                    } else if(oldDist - newDist > 700) { // zoom out
-                        oldDist = newDist;
-                        grid_gallery.setNumColumns(7); // test
-                        //todo zoom out 되었을 때 구현
-                        switch (gridmode){
                             case MODE_YEAR:
                                 gridmode = MODE_MONTH;
                                 grid_gallery.setNumColumns(5);
@@ -157,6 +141,21 @@ public class MainActivity extends AppCompatActivity {
                                 grid_gallery.setNumColumns(3);
                                 break;
                             case MODE_DAILY: break;
+                        }
+
+                    } else if(oldDist - newDist > 700) { // zoom out
+                        oldDist = newDist;
+
+                        switch (gridmode){
+                            case MODE_DAILY:
+                                gridmode = MODE_MONTH;
+                                grid_gallery.setNumColumns(5);
+                                break;
+                            case MODE_MONTH:
+                                gridmode = MODE_YEAR;
+                                grid_gallery.setNumColumns(7);
+                                break;
+                            case MODE_YEAR: break;
                         }
 
                     }
@@ -417,7 +416,17 @@ public class MainActivity extends AppCompatActivity {
                 headerViewHolder = (HeaderViewHolder)convertView.getTag();
             }
 
-            headerViewHolder.txtHeader.setText(galleryImgsArrayList.get(position).getTime());
+            switch (gridmode){
+                case MODE_DAILY:
+                    headerViewHolder.txtHeader.setText(galleryImgsArrayList.get(position).getTime());
+                    break;
+                case MODE_MONTH:
+                    headerViewHolder.txtHeader.setText(galleryImgsArrayList.get(position).getMonth());
+                    break;
+                case MODE_YEAR:
+                    headerViewHolder.txtHeader.setText(galleryImgsArrayList.get(position).getYear());
+                    break;
+            }
 
             return convertView;
         }
